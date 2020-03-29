@@ -39,10 +39,10 @@ struct EnumProcessEntry
 };
 
 static PlainArray<EnumProcessEntry,1024> g_ProcessExplorerEntries;
-HWND g_foundWindow;
 
 BOOL CALLBACK EnumWindowsProcs(HWND hWnd, LPARAM lParam)
 {
+	ExplorerTab* expTab = (ExplorerTab*)lParam;
 	const wchar_t* targetClassName = L"CabinetWClass\0";
 	wchar_t className[14];
 	GetClassName(hWnd, className, 14);
@@ -55,7 +55,8 @@ BOOL CALLBACK EnumWindowsProcs(HWND hWnd, LPARAM lParam)
 		for(int i = 0; i < g_ProcessExplorerEntries.count; i++) {
 			if(g_ProcessExplorerEntries[i].processID == processID) {
 				LOG("found explorer window (%d)", processID);
-				g_foundWindow = hWnd;
+				expTab->hWindow = hWnd;
+				expTab->processID = processID;
 				return false; // stop enum
 			}
 		}
@@ -64,11 +65,11 @@ BOOL CALLBACK EnumWindowsProcs(HWND hWnd, LPARAM lParam)
 	return true; // continue
 }
 
-HWND OpenExplorer()
+bool OpenExplorer(ExplorerTab* expTab)
 {
 	// execute explorer
 	SHELLEXECUTEINFO SEI = {0};
-	SEI.cbSize = sizeof (SHELLEXECUTEINFO);
+	SEI.cbSize = sizeof(SHELLEXECUTEINFO);
 	SEI.fMask = SEE_MASK_NOCLOSEPROCESS;
 	SEI.lpVerb = NULL;
 	SEI.lpFile = L"explorer.exe"; // Open an Explorer window at the 'Computer'
@@ -92,10 +93,11 @@ HWND OpenExplorer()
 		PROCESSENTRY32 entry;
 		entry.dwSize = sizeof(PROCESSENTRY32);
 
+		LOG("New explorer tab (%d)", GetProcessId(SEI.hProcess));
+
 		DWORD t0 = timeGetTime();
 		while(timeGetTime() - t0 < 5000) {
 			g_ProcessExplorerEntries.Clear();
-			g_foundWindow = 0x0;
 			bool found = false;
 
 			HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL);
@@ -115,18 +117,20 @@ HWND OpenExplorer()
 				continue;
 			}
 
-			if(!EnumWindows(&EnumWindowsProcs, 0x0)) {
-				if(g_foundWindow) {
-					return g_foundWindow;
+			while(!EnumWindows(&EnumWindowsProcs, (LPARAM)expTab)) {
+				if(expTab->hWindow) {
+					return true;
 				}
 			}
 		}
 
 		// not found
-		return 0x0;
+		return false;
 	}
 	else{
 		LOG("ERROR: ShellExecuteEx code=%d SEI.hInstApp=%llx", GetLastError(), (i64)SEI.hInstApp);
-		return 0x0;
+		return false;
 	}
+
+	return false;
 }

@@ -66,7 +66,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	const int width = mainWindowRect.right - mainWindowRect.left;
 	const int height = mainWindowRect.bottom - mainWindowRect.top;
 
-	HWND hExplorerWnd = OpenExplorer();
+	ExplorerTab expTab;
+	OpenExplorer(&expTab);
+	HWND hExplorerWnd = expTab.hWindow;
 
 	// Explorer window:
 	// Set parent to our main window
@@ -85,11 +87,22 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	// Focus main window
 	SetActiveWindow(hMainWindow);
 
+	// Copy title from explorer window
+	wchar_t title[1024];
+	GetWindowText(hExplorerWnd, title, ARRAY_COUNT(title));
+	SetWindowText(hMainWindow, title);
+
+	// Copy icon from explorer window
+	HICON hIcon = (HICON)SendMessage(hExplorerWnd, WM_GETICON, ICON_SMALL, 0);
+	SendMessage(hMainWindow, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+
 	MSG msg = { };
 	while(GetMessageA(&msg, NULL, 0, 0)) {
 		TranslateMessage(&msg);
 		DispatchMessageA(&msg);
 	}
+
+	TerminateProcess(OpenProcess(PROCESS_TERMINATE, FALSE, expTab.processID), 0);
 
 	LOG("Exiting...");
 

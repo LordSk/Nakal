@@ -9,3 +9,5 @@ typedef int32_t i32;
 typedef int64_t i64;
 
 #define ASSERT(cond) if(!(cond)) { __debugbreak(); }
+
+#define ARRAY_COUNT(A) (sizeof(A)/sizeof(A[0]))
