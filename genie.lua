@@ -3,7 +3,7 @@ dofile("config.lua");
 
 BUILD_DIR = path.getabsolute("./build")
 
-solution "Tabs solution"
+solution "Nakal solution"
 	location(BUILD_DIR)
 	
 	configurations {
@@ -72,7 +72,7 @@ solution "Tabs solution"
 	buildoptions{ "/wd4577", "/wd4530" }
 	
 
-project "Tabs"
+project "Nakal"
 	kind "WindowedApp"
 	
 	configuration {}

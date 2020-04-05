@@ -1,37 +1,10 @@
 #include "explorer.h"
+#include "nakal_main.h"
 #include "base.h"
 
 #include <shellapi.h>
 #include <tlhelp32.h>
 #include <timeapi.h>
-
-template<typename T, u32 CAPACITY_>
-struct PlainArray
-{
-	enum {
-		CAPACITY = CAPACITY_
-	};
-
-	T data[CAPACITY];
-	i32 count = 0;
-
-	T& Push(T elt)
-	{
-		ASSERT(count < CAPACITY);
-		return data[count++] = elt;
-	}
-
-	void Clear()
-	{
-		count = 0;
-	}
-
-	inline T& operator [] (u32 index)
-	{
-		ASSERT(index < count);
-		return data[index];
-	}
-};
 
 struct EnumProcessEntry
 {
@@ -42,7 +15,8 @@ static PlainArray<EnumProcessEntry,1024> g_ProcessExplorerEntries;
 
 BOOL CALLBACK EnumWindowsProcs(HWND hWnd, LPARAM lParam)
 {
-	ExplorerTab* expTab = (ExplorerTab*)lParam;
+	Application& app = *(Application*)lParam;
+
 	const wchar_t* targetClassName = L"CabinetWClass\0";
 	wchar_t className[14];
 	GetClassName(hWnd, className, 14);
@@ -55,8 +29,11 @@ BOOL CALLBACK EnumWindowsProcs(HWND hWnd, LPARAM lParam)
 		for(int i = 0; i < g_ProcessExplorerEntries.count; i++) {
 			if(g_ProcessExplorerEntries[i].processID == processID) {
 				LOG("found explorer window (%d)", processID);
-				expTab->hWindow = hWnd;
-				expTab->processID = processID;
+
+				ExplorerTab tab;
+				tab.hWindow = hWnd;
+				tab.processID = processID;
+				app.AddTab(tab);
 				return false; // stop enum
 			}
 		}
@@ -65,7 +42,7 @@ BOOL CALLBACK EnumWindowsProcs(HWND hWnd, LPARAM lParam)
 	return true; // continue
 }
 
-bool OpenExplorer(ExplorerTab* expTab)
+bool OpenNewExplorerTab(const char* path)
 {
 	// execute explorer
 	SHELLEXECUTEINFO SEI = {0};
@@ -90,47 +67,40 @@ bool OpenExplorer(ExplorerTab* expTab)
 	SEI.hInstApp = nullptr;
 
 	if(ShellExecuteEx(&SEI)) {
+		return true;
+	}
+	return false;
+}
+
+DWORD ThreadExplorerScanner(void* pData)
+{
+	Application& app = *(Application*)pData;
+
+	DWORD t0 = timeGetTime();
+	while(app.isRunning)
+	{
 		PROCESSENTRY32 entry;
 		entry.dwSize = sizeof(PROCESSENTRY32);
 
-		LOG("New explorer tab (%d)", GetProcessId(SEI.hProcess));
+		g_ProcessExplorerEntries.Clear();
+		bool found = false;
 
-		DWORD t0 = timeGetTime();
-		while(timeGetTime() - t0 < 5000) {
-			g_ProcessExplorerEntries.Clear();
-			bool found = false;
-
-			HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL);
-			if(Process32First(snapshot, &entry)) {
-				while(Process32Next(snapshot, &entry)) {
-					if(wcscmp(entry.szExeFile, L"explorer.exe") == 0) {
-						found = true;
-						EnumProcessEntry savedEntry;
-						savedEntry.processID = entry.th32ProcessID;
-						g_ProcessExplorerEntries.Push(savedEntry);
-					}
-				}
-			}
-
-			if(!found) {
-				LOG("shellExecute success but not found target process");
-				continue;
-			}
-
-			while(!EnumWindows(&EnumWindowsProcs, (LPARAM)expTab)) {
-				if(expTab->hWindow) {
-					return true;
+		HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL);
+		if(Process32First(snapshot, &entry)) {
+			while(Process32Next(snapshot, &entry)) {
+				if(wcscmp(entry.szExeFile, L"explorer.exe") == 0) {
+					found = true;
+					EnumProcessEntry savedEntry;
+					savedEntry.processID = entry.th32ProcessID;
+					g_ProcessExplorerEntries.Push(savedEntry);
 				}
 			}
 		}
 
-		// not found
-		return false;
-	}
-	else{
-		LOG("ERROR: ShellExecuteEx code=%d SEI.hInstApp=%llx", GetLastError(), (i64)SEI.hInstApp);
-		return false;
+		while(!EnumWindows(&EnumWindowsProcs, (LPARAM)&app));
+
+		Sleep(100);
 	}
 
-	return false;
+	return 0;
 }

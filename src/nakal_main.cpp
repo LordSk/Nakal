@@ -1,8 +1,13 @@
-#include "base.h"
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-
+#include "nakal_main.h"
 #include "explorer.h"
+
+#error TODO:
+// - Make the main window focus when adding a tab
+// - Pass child window messages to parent SetWindowLongPtr (https://docs.microsoft.com/en-gb/windows/win32/winmsg/using-window-procedures?redirectedfrom=MSDN#subclassing_window)
+// - Allow tab switching (key shortcuts for now)
+// - Draw tabs on title bar (https://docs.microsoft.com/en-us/windows/win32/dwm/customframe)
+
+// https://github.com/Dixeran/TestTab
 
 LRESULT CALLBACK WindowProc(HWND hWindow, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -23,21 +28,30 @@ LRESULT CALLBACK WindowProc(HWND hWindow, UINT uMsg, WPARAM wParam, LPARAM lPara
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 {
-	LOG("hello tabs!");
+	LOG(".: Nakal :.");
 
+	Application app;
+	if(!app.Init(hInstance, hPrevInstance, pCmdLine, nCmdShow)) {
+		LOG("Error initialising application");
+		return 1;
+	}
+
+	app.Run();
+	return 0;
+}
+
+bool Application::Init(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
+{
 	// Register the window class.
-	const wchar_t CLASS_NAME[]  = L"Sample Window Class";
-
-	WNDCLASS wc = { };
-
+	const wchar_t CLASS_NAME[]  = L"Nakal";
+	WNDCLASS wc = {};
 	wc.lpfnWndProc   = WindowProc;
 	wc.hInstance     = hInstance;
 	wc.lpszClassName = CLASS_NAME;
-
 	RegisterClass(&wc);
 
 	// Create the window.
-	HWND hMainWindow = CreateWindowEx(
+	hMainWindow = CreateWindowEx(
 		0,                              // Optional window styles.
 		CLASS_NAME,                     // Window class
 		L"Learn to Program Windows",    // Window text
@@ -54,21 +68,49 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
 	if(hMainWindow == NULL)
 	{
-		LOG("%x", GetLastError());
-		return 0;
+		LOG("Error creating window: %x", GetLastError());
+		return false;
 	}
 
 	ShowWindow(hMainWindow, nCmdShow);
 
+	hThreadExplorerScanner = CreateThread(NULL, 0, ThreadExplorerScanner, this, 0, NULL);
+	OpenNewExplorerTab("");
+	return true;
+}
+
+void Application::Run()
+{
+	MSG msg = { };
+	while(GetMessageA(&msg, NULL, 0, 0)) {
+		TranslateMessage(&msg);
+		DispatchMessageA(&msg);
+	}
+
+	OnShutdown();
+}
+
+void Application::OnShutdown()
+{
+	LOG("Exiting...");
+	isRunning = false;
+	WaitForSingleObject(hThreadExplorerScanner, 2000);
+
+	for(int i = 0; i < tabs.Count(); i++) {
+		TerminateProcess(OpenProcess(PROCESS_TERMINATE, FALSE, tabs[i].processID), 0);
+	}
+	tabs.Clear();
+}
+
+bool Application::AddTab(const ExplorerTab& tab)
+{
 	RECT mainWindowRect;
 	GetWindowRect(hMainWindow, &mainWindowRect);
 
 	const int width = mainWindowRect.right - mainWindowRect.left;
 	const int height = mainWindowRect.bottom - mainWindowRect.top;
 
-	ExplorerTab expTab;
-	OpenExplorer(&expTab);
-	HWND hExplorerWnd = expTab.hWindow;
+	HWND hExplorerWnd = tab.hWindow;
 
 	// Explorer window:
 	// Set parent to our main window
@@ -87,6 +129,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	// Focus main window
 	SetActiveWindow(hMainWindow);
 
+	tabs.Push(tab);
+
+	/*
 	// Copy title from explorer window
 	wchar_t title[1024];
 	GetWindowText(hExplorerWnd, title, ARRAY_COUNT(title));
@@ -95,16 +140,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	// Copy icon from explorer window
 	HICON hIcon = (HICON)SendMessage(hExplorerWnd, WM_GETICON, ICON_SMALL, 0);
 	SendMessage(hMainWindow, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+	*/
 
-	MSG msg = { };
-	while(GetMessageA(&msg, NULL, 0, 0)) {
-		TranslateMessage(&msg);
-		DispatchMessageA(&msg);
-	}
-
-	TerminateProcess(OpenProcess(PROCESS_TERMINATE, FALSE, expTab.processID), 0);
-
-	LOG("Exiting...");
-
-	return 0;
+	return true;
 }
