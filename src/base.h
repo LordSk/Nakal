@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#define LOG(fmt, ...) printf(fmt "\n", __VA_ARGS__)
+#define LOG(fmt, ...) printf(fmt "\n", __VA_ARGS__); fflush(stdout)
 
 typedef uint32_t u32;
 typedef int32_t i32;
@@ -88,13 +88,13 @@ struct PlainArray
 
 	inline T& operator [] (u32 index)
 	{
-		DBG_ASSERT(index < count);
+		DBG_ASSERT((i32)index < count);
 		return data[index];
 	}
 
 	inline const T& operator [] (u32 index) const
 	{
-		DBG_ASSERT(index < count);
+		DBG_ASSERT((i32)index < count);
 		return data[index];
 	}
 };

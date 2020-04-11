@@ -33,7 +33,7 @@ BOOL CALLBACK EnumWindowsProcs(HWND hWnd, LPARAM lParam)
 				ExplorerTab tab;
 				tab.hWindow = hWnd;
 				tab.processID = processID;
-				app.AddTab(tab);
+				app.CaptureTab(tab);
 				return false; // stop enum
 			}
 		}
