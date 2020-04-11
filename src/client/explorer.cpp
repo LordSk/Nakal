@@ -23,7 +23,7 @@ BOOL CALLBACK EnumWindowsProcs(HWND hWnd, LPARAM lParam)
 
 	if(isValid) {
 		DWORD processID;
-		GetWindowThreadProcessId(hWnd, &processID);
+		DWORD threadID = GetWindowThreadProcessId(hWnd, &processID);
 
 		for(int i = 0; i < g_ProcessExplorerEntries.count; i++) {
 			if(g_ProcessExplorerEntries[i].processID == processID) {
@@ -32,6 +32,7 @@ BOOL CALLBACK EnumWindowsProcs(HWND hWnd, LPARAM lParam)
 				ExplorerTab tab;
 				tab.hWindow = hWnd;
 				tab.processID = processID;
+				tab.threadID = threadID;
 				app.CaptureTab(tab);
 				return false; // stop enum
 			}

@@ -2,8 +2,6 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#define LOG(fmt, ...) printf(fmt "\n", __VA_ARGS__); fflush(stdout)
-
 typedef uint32_t u32;
 typedef int32_t i32;
 typedef int64_t i64;
@@ -16,6 +14,8 @@ typedef int64_t i64;
 #endif
 
 #define ARRAY_COUNT(A) (sizeof(A)/sizeof(A[0]))
+
+#define NAKAL_WND_CLASS L"Nakal_1564568463"
 
 template<typename T, u32 CAPACITY>
 struct PlainArray

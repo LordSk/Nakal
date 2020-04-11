@@ -1,8 +1,9 @@
 #include "nakal_main.h"
 #include "explorer.h"
+#include <common/ipc.h>
 
 //#error TODO:
-// - Pass child window messages to parent SetWindowLongPtr (https://docs.microsoft.com/en-gb/windows/win32/winmsg/using-window-procedures?redirectedfrom=MSDN#subclassing_window)
+// - New tab, Exit tab (key shortcuts for now)
 // - Allow tab switching (key shortcuts for now)
 // - Draw tabs on title bar (https://docs.microsoft.com/en-us/windows/win32/dwm/customframe)
 
@@ -28,6 +29,26 @@ LRESULT CALLBACK WindowProc(HWND hWindow, UINT uMsg, WPARAM wParam, LPARAM lPara
 			}
 		} break;
 
+		case WM_COPYDATA: {
+			COPYDATASTRUCT copyData = *(COPYDATASTRUCT*)lParam;
+			if(copyData.cbData == sizeof(MSG)) {
+				MSG& msg = *(MSG*)copyData.lpData;
+				LOG("message %u", msg.message);
+
+				if(msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) {
+					PostQuitMessage(0);
+				}
+			}
+			if(copyData.cbData == sizeof(IpcKeyStroke)) {
+				const IpcKeyStroke& stroke = *(IpcKeyStroke*)copyData.lpData;
+				LOG("key %d %d", stroke.vkey, stroke.status);
+
+				if(stroke.vkey == VK_ESCAPE) {
+					PostQuitMessage(0);
+				}
+			}
+		} break;
+
 		case WM_FOCUS_MAINWINDOW: {
 			SetActiveWindow(hWindow);
 		} break;
@@ -39,17 +60,16 @@ LRESULT CALLBACK WindowProc(HWND hWindow, UINT uMsg, WPARAM wParam, LPARAM lPara
 bool Application::Init(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 {
 	// Register the window class.
-	const wchar_t CLASS_NAME[]  = L"Nakal";
 	WNDCLASS wc = {};
 	wc.lpfnWndProc   = WindowProc;
 	wc.hInstance     = hInstance;
-	wc.lpszClassName = CLASS_NAME;
+	wc.lpszClassName = NAKAL_WND_CLASS;
 	RegisterClass(&wc);
 
 	// Create the window.
 	hMainWindow = CreateWindowEx(
 		0,                              // Optional window styles.
-		CLASS_NAME,                     // Window class
+		NAKAL_WND_CLASS,                     // Window class
 		L"Learn to Program Windows",    // Window text
 		WS_OVERLAPPEDWINDOW,            // Window style
 
@@ -73,21 +93,21 @@ bool Application::Init(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdL
 	hThreadExplorerScanner = CreateThread(NULL, 0, ThreadExplorerScanner, this, 0, NULL);
 
 
-	HMODULE hHookDll = LoadLibraryA("HookDll_debug.dll");
+	hHookDll = LoadLibraryA("HookDll_debug.dll");
 	if(!hHookDll) {
 		LOG("Error: loading hook dll (%d)", GetLastError());
 		return false;
 	}
 
-	HOOKPROC hookProc = (HOOKPROC)GetProcAddress(hHookDll, "Hook");
-	if(!hookProc) {
-		LOG("Error: getting hook procedure adress (%d)", GetLastError());
+	callWndProc = (HOOKPROC)GetProcAddress(hHookDll, "CallWndProc");
+	if(!callWndProc) {
+		LOG("Error: getting CallWndProc() procedure address (%d)", GetLastError());
 		return false;
 	}
 
-	HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, hookProc, hHookDll, 0);
-	if(hook == NULL) {
-		LOG("Error: failed to install tab hook (%d)", GetLastError());
+	keyboardProc = (HOOKPROC)GetProcAddress(hHookDll, "KeyboardProc");
+	if(!keyboardProc) {
+		LOG("Error: getting KeyboardProc() procedure address (%d)", GetLastError());
 		return false;
 	}
 
@@ -114,10 +134,13 @@ void Application::Update()
 void Application::OnShutdown()
 {
 	LOG("Exiting...");
+
 	isRunning = false;
+
 	WaitForSingleObject(hThreadExplorerScanner, 2000);
 
 	for(int i = 0; i < tabs.Count(); i++) {
+		UnhookWindowsHookEx(tabs[i].hHook);
 		TerminateProcess(OpenProcess(PROCESS_TERMINATE, FALSE, tabs[i].processID), 0);
 	}
 	tabs.Clear();
@@ -156,7 +179,19 @@ bool Application::CaptureTab(ExplorerTab tab)
 		MoveWindow(hExplorerWnd, 0, -31, width - 14, height - 10, true);
 	}
 
-	ExplorerTab& newTab = tabs.Push(tab);
+	// hooks to get messages
+	/*tab.hHook = SetWindowsHookEx(WH_CALLWNDPROC, callWndProc, hHookDll, tab.threadID);
+	if(tab.hHook == NULL) {
+		LOG("Error: failed to install tab callwnd hook (%d)", GetLastError());
+		return false;
+	}*/
+	tab.hHook = SetWindowsHookEx(WH_KEYBOARD, keyboardProc, hHookDll, tab.threadID);
+	if(tab.hHook == NULL) {
+		LOG("Error: failed to install tab keyboard hook (%d)", GetLastError());
+		return false;
+	}
+
+	tabs.Push(tab);
 
 	// Focus main window
 	SendMessageA(hMainWindow, WM_USER, 0, 0);
@@ -165,6 +200,7 @@ bool Application::CaptureTab(ExplorerTab tab)
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 {
+	LogInit("nakal.log");
 	LOG(".: Nakal :.");
 
 	Application app;
