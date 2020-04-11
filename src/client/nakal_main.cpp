@@ -72,13 +72,24 @@ bool Application::Init(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdL
 
 	hThreadExplorerScanner = CreateThread(NULL, 0, ThreadExplorerScanner, this, 0, NULL);
 
-	/*
-	HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, Test, NULL, 0);
+
+	HMODULE hHookDll = LoadLibraryA("HookDll_debug.dll");
+	if(!hHookDll) {
+		LOG("Error: loading hook dll (%d)", GetLastError());
+		return false;
+	}
+
+	HOOKPROC hookProc = (HOOKPROC)GetProcAddress(hHookDll, "Hook");
+	if(!hookProc) {
+		LOG("Error: getting hook procedure adress (%d)", GetLastError());
+		return false;
+	}
+
+	HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, hookProc, hHookDll, 0);
 	if(hook == NULL) {
 		LOG("Error: failed to install tab hook (%d)", GetLastError());
 		return false;
 	}
-	*/
 
 	OpenNewExplorerTab("");
 	return true;

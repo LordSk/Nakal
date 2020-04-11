@@ -2,6 +2,11 @@
 dofile("config.lua");
 
 BUILD_DIR = path.getabsolute("./build")
+COMMON_FILES = {
+	"src/common/**.h",
+	"src/common/**.c",
+	"src/common/**.cpp"
+}
 
 solution "Nakal solution"
 	location(BUILD_DIR)
@@ -82,8 +87,22 @@ project "Nakal"
 	}
 	
 	files {
-		"src/**.h",
-		"src/**.c",
-		"src/**.cpp",
-        "src/**.rc",
+		COMMON_FILES,
+		"src/client/**.h",
+		"src/client/**.c",
+		"src/client/**.cpp",
+        "src/client/**.rc",
+	}
+
+project "HookDll"
+	kind "SharedLib"
+	
+	configuration {}
+
+	files {
+		COMMON_FILES,
+		"src/hook/**.h",
+		"src/hook/**.c",
+		"src/hook/**.cpp",
+        "src/hook/**.rc",
 	}
