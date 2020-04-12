@@ -41,7 +41,7 @@ struct HookData
 		// https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms644984(v=vs.85)?redirectedfrom=MSDN
 		IpcKeyStroke stroke;
 		stroke.vkey = vkey;
-		stroke.status = (flags >> 31) & 1;
+		stroke.status = !((flags >> 31) & 1); // make it 1 == pressed 0 == released
 
 		COPYDATASTRUCT copyData;
 		copyData.dwData = GetCurrentThreadId();

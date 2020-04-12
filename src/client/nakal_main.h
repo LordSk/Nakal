@@ -18,19 +18,32 @@ struct Application
 		MAX_TABS=128
 	};
 
-	HWND hMainWindow;
-	PlainArray<ExplorerTab,MAX_TABS> tabs;
 	bool isRunning = true;
+
+	HWND hMainWindow;
 	HANDLE hThreadExplorerScanner;
+
+	PlainArray<ExplorerTab,MAX_TABS> tabs;
 
 	HMODULE hHookDll;
 	HOOKPROC callWndProc;
 	HOOKPROC keyboardProc;
 
+	i32 currentTabID = 0;
+	u8 keyStatus[0xFF];
+
 	bool Init(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow);
 	void Run();
 	void Update();
+	void Shutdown();
 	void OnShutdown();
 
+	void HandleKeyStroke(int vkey, int status);
+
 	bool CaptureTab(ExplorerTab tab);
+	void ExitTab(i32 tabID);
+	void SwitchToTab(i32 tabID);
+
+	// Shell execute to open an explorer process
+	bool OpenNewExplorerTab(const char* path);
 };

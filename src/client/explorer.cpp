@@ -1,7 +1,6 @@
 #include "explorer.h"
 #include "nakal_main.h"
 
-#include <shellapi.h>
 #include <tlhelp32.h>
 #include <timeapi.h>
 
@@ -40,36 +39,6 @@ BOOL CALLBACK EnumWindowsProcs(HWND hWnd, LPARAM lParam)
 	}
 
 	return true; // continue
-}
-
-bool OpenNewExplorerTab(const char* path)
-{
-	// execute explorer
-	SHELLEXECUTEINFO SEI = {0};
-	SEI.cbSize = sizeof(SHELLEXECUTEINFO);
-	SEI.fMask = SEE_MASK_NOCLOSEPROCESS;
-	SEI.lpVerb = NULL;
-	SEI.lpFile = L"explorer.exe"; // Open an Explorer window at the 'Computer'
-	SEI.lpParameters = L","; // default path
-
-	/*if(path != ""){
-		path = path.right(path.length() - 8); // cut prefix file:///
-		path.replace("/", "\\");
-		path.push_front("/root,");
-		wchar_t* path_w = new wchar_t[path.length() + 1];
-		path.toWCharArray(path_w);
-		path_w[path.length()] = L'\0';
-		SEI.lpParameters = path_w;
-	}*/
-
-	SEI.lpDirectory = nullptr;
-	SEI.nShow = SW_MINIMIZE; // don't popup
-	SEI.hInstApp = nullptr;
-
-	if(ShellExecuteEx(&SEI)) {
-		return true;
-	}
-	return false;
 }
 
 DWORD ThreadExplorerScanner(void* pData)

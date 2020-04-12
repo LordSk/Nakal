@@ -2,9 +2,10 @@
 #include "explorer.h"
 #include <common/ipc.h>
 
+#include <shellapi.h>
+
 //#error TODO:
-// - New tab, Exit tab (key shortcuts for now)
-// - Allow tab switching (key shortcuts for now)
+// - Condition variable to wake scanner thread up
 // - Draw tabs on title bar (https://docs.microsoft.com/en-us/windows/win32/dwm/customframe)
 
 // https://github.com/Dixeran/TestTab
@@ -16,6 +17,11 @@ enum {
 
 };
 
+enum {
+	KEY_PRESSED = 1,
+	KEY_RELEASED = 0,
+};
+
 LRESULT CALLBACK WindowProc(HWND hWindow, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	switch(uMsg) {
@@ -24,28 +30,20 @@ LRESULT CALLBACK WindowProc(HWND hWindow, UINT uMsg, WPARAM wParam, LPARAM lPara
 		} break;
 
 		case WM_KEYDOWN: {
-			if(wParam == VK_ESCAPE) {
-				PostQuitMessage(0);
-			}
+			g_App->HandleKeyStroke(wParam, KEY_PRESSED);
+		} break;
+
+		case WM_KEYUP: {
+			g_App->HandleKeyStroke(wParam, KEY_RELEASED);
 		} break;
 
 		case WM_COPYDATA: {
 			COPYDATASTRUCT copyData = *(COPYDATASTRUCT*)lParam;
-			if(copyData.cbData == sizeof(MSG)) {
-				MSG& msg = *(MSG*)copyData.lpData;
-				LOG("message %u", msg.message);
-
-				if(msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) {
-					PostQuitMessage(0);
-				}
-			}
 			if(copyData.cbData == sizeof(IpcKeyStroke)) {
 				const IpcKeyStroke& stroke = *(IpcKeyStroke*)copyData.lpData;
 				LOG("key %d %d", stroke.vkey, stroke.status);
 
-				if(stroke.vkey == VK_ESCAPE) {
-					PostQuitMessage(0);
-				}
+				g_App->HandleKeyStroke(stroke.vkey, stroke.status);
 			}
 		} break;
 
@@ -111,6 +109,8 @@ bool Application::Init(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdL
 		return false;
 	}
 
+	memset(keyStatus, 0, sizeof(keyStatus));
+
 	OpenNewExplorerTab("");
 	return true;
 }
@@ -131,6 +131,12 @@ void Application::Update()
 {
 }
 
+void Application::Shutdown()
+{
+	isRunning = false;
+	PostQuitMessage(0);
+}
+
 void Application::OnShutdown()
 {
 	LOG("Exiting...");
@@ -144,6 +150,25 @@ void Application::OnShutdown()
 		TerminateProcess(OpenProcess(PROCESS_TERMINATE, FALSE, tabs[i].processID), 0);
 	}
 	tabs.Clear();
+}
+
+void Application::HandleKeyStroke(int vkey, int status)
+{
+	ASSERT(vkey >= 0 && vkey < ARRAY_COUNT(keyStatus));
+	keyStatus[vkey] = status;
+
+#ifdef CONF_DEBUG
+	if(vkey == VK_ESCAPE) {
+		Shutdown();
+	}
+#endif
+
+	if(keyStatus[VK_CONTROL] && keyStatus['W']) {
+		ExitTab(currentTabID);
+	}
+	if(keyStatus[VK_CONTROL] && keyStatus['T']) {
+		OpenNewExplorerTab("");
+	}
 }
 
 bool Application::CaptureTab(ExplorerTab tab)
@@ -192,10 +217,80 @@ bool Application::CaptureTab(ExplorerTab tab)
 	}
 
 	tabs.Push(tab);
+	const i32 tabID = tabs.Count() - 1;
+	SwitchToTab(tabID);
 
 	// Focus main window
 	SendMessageA(hMainWindow, WM_USER, 0, 0);
 	return true;
+}
+
+void Application::ExitTab(i32 tabID)
+{
+	ASSERT(tabID >= 0 && tabID < tabs.Count());
+
+	ExplorerTab& tab = tabs[tabID];
+	SendMessage(tab.hWindow, WM_QUIT, 0, 0);
+	UnhookWindowsHookEx(tab.hHook);
+	TerminateProcess(OpenProcess(PROCESS_TERMINATE, FALSE, tab.processID), 0);
+
+	tabs.RemoveByIDKeepOrder(tabID);
+
+	if(currentTabID >= tabs.Count()) {
+		currentTabID--;
+	}
+
+	if(tabs.Count() == 0) {
+		Shutdown();
+	}
+}
+
+void Application::SwitchToTab(i32 tabID)
+{
+	ASSERT(tabID >= 0 && tabID < tabs.Count());
+
+	const int tabCount = tabs.Count();
+	for(int i = 0; i < tabCount; i++) {
+		ExplorerTab& tab = tabs[tabID];
+		if(i == tabID) {
+			ShowWindow(tab.hWindow, SW_SHOW);
+		}
+		else {
+			ShowWindow(tab.hWindow, SW_HIDE);
+		}
+	}
+
+	currentTabID = tabID;
+}
+
+bool Application::OpenNewExplorerTab(const char* path)
+{
+	// execute explorer
+	SHELLEXECUTEINFO SEI = {0};
+	SEI.cbSize = sizeof(SHELLEXECUTEINFO);
+	SEI.fMask = SEE_MASK_NOCLOSEPROCESS;
+	SEI.lpVerb = NULL;
+	SEI.lpFile = L"explorer.exe"; // Open an Explorer window at the 'Computer'
+	SEI.lpParameters = L","; // default path
+
+	/*if(path != ""){
+			path = path.right(path.length() - 8); // cut prefix file:///
+			path.replace("/", "\\");
+			path.push_front("/root,");
+			wchar_t* path_w = new wchar_t[path.length() + 1];
+			path.toWCharArray(path_w);
+			path_w[path.length()] = L'\0';
+			SEI.lpParameters = path_w;
+		}*/
+
+	SEI.lpDirectory = nullptr;
+	SEI.nShow = SW_MINIMIZE; // don't popup
+	SEI.hInstApp = nullptr;
+
+	if(ShellExecuteEx(&SEI)) {
+		return true;
+	}
+	return false;
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
