@@ -85,6 +85,11 @@ project "Nakal"
 	flags {
 		"WinMain"
 	}
+
+	links {
+		"dwmapi",
+		"gdi32"
+	}
 	
 	files {
 		COMMON_FILES,

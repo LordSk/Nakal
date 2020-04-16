@@ -1,6 +1,7 @@
 #pragma once
 #include <stdio.h>
 #include <stdint.h>
+#include <stdarg.h>
 
 typedef uint8_t u8;
 typedef uint32_t u32;
@@ -99,3 +100,18 @@ struct PlainArray
 		return data[index];
 	}
 };
+
+
+static const char* _TempStrFormat(const char* fmt, ...)
+{
+	thread_local char buff[4096];
+
+	va_list list;
+	va_start(list, fmt);
+	vsnprintf(buff, sizeof(buff), fmt, list);
+	va_end(list);
+
+	return buff;
+}
+
+#define FMT(...) _TempStrFormat(__VA_ARGS__)

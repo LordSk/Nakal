@@ -5,8 +5,10 @@ Logger* g_Logger = &logger;
 
 void Logger::Init(const char* filename)
 {
-	file = fopen(filename, "wb");
-	ASSERT(file);
+	if(file == nullptr) {
+		file = fopen(filename, "wb");
+		ASSERT(file);
+	}
 }
 
 void Logger::Destroy()
